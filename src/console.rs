@@ -10,6 +10,8 @@ impl fmt::Write for Writer {
             }
             crate::uart::putc(b);
         }
+        crate::gpu::print_str(s);
+        crate::gpu::flush();
         Ok(())
     }
 }
@@ -35,27 +37,27 @@ pub fn read_line(buf: &mut [u8]) -> usize {
     loop {
         let c = match crate::uart::getc() {
             Some(c) => c,
-            None => continue,
+            None => match crate::keyboard::poll() {
+                Some(k) => k,
+                None => continue,
+            }
         };
         match c {
             b'\r' | b'\n' => {
-                crate::uart::putc(b'\r');
-                crate::uart::putc(b'\n');
+                print!("\r\n");
                 return i;
             }
             0x7f | 0x08 => {
                 if i > 0 {
                     i -= 1;
-                    crate::uart::putc(0x08);
-                    crate::uart::putc(b' ');
-                    crate::uart::putc(0x08);
+                    print!("\x08 \x08");
                 }
             }
             0x03 => return 0, // Ctrl-C
             c if c >= 0x20 && i < buf.len() - 1 => {
                 buf[i] = c;
                 i += 1;
-                crate::uart::putc(c);
+                print!("{}", c as char);
             }
             _ => {}
         }
@@ -83,6 +85,9 @@ fn wait_byte() -> Option<u8> {
         if let Some(c) = crate::uart::getc() {
             return Some(c);
         }
+        if let Some(k) = crate::keyboard::poll() {
+            return Some(k);
+        }
     }
     None
 }
@@ -91,6 +96,9 @@ pub fn read_key() -> Key {
     let c = loop {
         if let Some(c) = crate::uart::getc() {
             break c;
+        }
+        if let Some(k) = crate::keyboard::poll() {
+            break k;
         }
     };
     match c {

@@ -10,6 +10,11 @@ mod trap;
 mod fs;
 mod shell;
 mod editor;
+mod paging;
+mod virtio;
+mod gpu;
+mod font;
+mod keyboard;
 
 use core::arch::global_asm;
 
@@ -17,7 +22,7 @@ global_asm!(
     ".section .text.boot",
     ".globl _start",
     "_start:",
-    "    csrr t0, mhartid",
+    "    mv t0, a0",
     "    bnez t0, _park",
     "    la   sp, _stack_top",
     "    la   t0, _bss_start",
@@ -28,7 +33,22 @@ global_asm!(
     "    addi t0, t0, 8",
     "    j    _bss_clear",
     "_bss_done:",
-    "    call kmain",
+    "    li t0, 0x3fffffffffffffff",
+    "    csrw pmpaddr0, t0",
+    "    li t0, 0x1f",
+    "    csrw pmpcfg0, t0",
+    "    li t0, 1 << 63",
+    "    csrw 0x30a, t0", // 0x30A is menvcfg
+    "    li t0, -1",
+    "    csrw mcounteren, t0",
+    "    li t0, 0xffff",
+    "    csrw medeleg, t0",
+    "    csrw mideleg, t0",
+    "    li t0, 1 << 11",
+    "    csrw mstatus, t0",
+    "    la t0, kmain",
+    "    csrw mepc, t0",
+    "    mret",
     "_park:",
     "    wfi",
     "    j    _park",
@@ -44,8 +64,22 @@ extern "C" fn kmain() -> ! {
     println!();
 
     alloc::init();
+    println!("Alloc init done");
     trap::init();
+    println!("Trap init done");
+    paging::init();
+    println!("Paging init done");
     fs::init();
+    println!("FS init done");
+    keyboard::init();
+    println!("Keyboard init done");
+
+    if gpu::init() {
+        println!("GPU initialized. Framebuffer: {}x{}", gpu::WIDTH, gpu::HEIGHT);
+        console::clear_screen();
+    } else {
+        println!("No VirtIO GPU found.");
+    }
 
     println!("Boot complete. Type 'help' for available commands.");
     println!();

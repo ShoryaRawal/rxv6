@@ -1,22 +1,40 @@
 use core::arch::global_asm;
 
-const CLINT_MTIMECMP: *mut u64 = 0x0200_4000 as *mut u64;
-const CLINT_MTIME: *const u64 = 0x0200_BFF8 as *const u64;
 const INTERVAL: u64 = 10_000_000;
 
 static mut TICKS: u64 = 0;
 
+core::arch::global_asm!(include_str!("vector.S"));
+
 extern "C" {
-    fn _trap_entry();
+    fn _vector_table();
+}
+
+fn sbi_set_timer(stime_value: u64) {
+    unsafe {
+        // Use stimecmp CSR (0x14D) instead of SBI
+        core::arch::asm!("csrw 0x14d, {}", in(reg) stime_value);
+    }
+}
+
+fn read_time() -> u64 {
+    let time: u64;
+    unsafe { core::arch::asm!("csrr {}, time", out(reg) time) };
+    time
 }
 
 pub fn init() {
     unsafe {
-        core::arch::asm!("csrw mtvec, {}", in(reg) _trap_entry as *const () as usize);
-        core::arch::asm!("csrs mie, {}", in(reg) 1usize << 7);
-        let now = CLINT_MTIME.read_volatile();
-        CLINT_MTIMECMP.write_volatile(now + INTERVAL);
-        core::arch::asm!("csrs mstatus, {}", in(reg) 1usize << 3);
+        // Set stvec to vector table, mode 1 (vectored)
+        core::arch::asm!("csrw stvec, {}", in(reg) (_vector_table as *const () as usize | 1));
+        // Enable Supervisor Timer Interrupt (STIE = bit 5)
+        core::arch::asm!("csrs sie, {}", in(reg) 1usize << 5);
+        
+        let now = read_time();
+        sbi_set_timer(now + INTERVAL);
+        
+        // Enable Supervisor Interrupts globally (SIE = bit 1)
+        core::arch::asm!("csrs sstatus, {}", in(reg) 1usize << 1);
     }
 }
 
@@ -26,15 +44,17 @@ pub fn ticks() -> u64 {
 
 #[no_mangle]
 extern "C" fn _trap_rust() {
-    let mcause: usize;
-    unsafe { core::arch::asm!("csrr {}, mcause", out(reg) mcause) };
-    let is_int = (mcause >> 63) & 1 == 1;
-    let code = mcause & 0xff;
-    if is_int && code == 7 {
+    let scause: usize;
+    unsafe { core::arch::asm!("csrr {}, scause", out(reg) scause) };
+    let is_int = (scause >> 63) & 1 == 1;
+    let code = scause & 0xff;
+    
+    // Supervisor Timer Interrupt is code 5
+    if is_int && code == 5 {
         unsafe {
             TICKS += 1;
-            let now = CLINT_MTIME.read_volatile();
-            CLINT_MTIMECMP.write_volatile(now + INTERVAL);
+            let now = read_time();
+            sbi_set_timer(now + INTERVAL);
         }
     }
 }
@@ -78,5 +98,5 @@ global_asm!(
     "ld t5, 112(sp)",
     "ld t6, 120(sp)",
     "addi sp, sp, 128",
-    "mret",
+    "sret",
 );

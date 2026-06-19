@@ -1,0 +1,23 @@
+{
+  "arch": "riscv64",
+  "cpu": "generic-rv64",
+  "data-layout": "e-m:e-p:64:64-i64:64-i128:128-n32:64-S128",
+  "dynamic-linking": true,
+  "env": "",
+  "executables": true,
+  "features": "+m,+a,+f,+d,+c",
+  "linker-flavor": "lld-link",
+  "linker": "rust-lld",
+  "llvm-target": "riscv64-unknown-windows-msvc",
+  "max-atomic-width": 64,
+  "os": "uefi",
+  "panic-strategy": "abort",
+  "relro-level": "off",
+  "target-c-int-width": "32",
+  "target-endian": "little",
+  "target-family": [
+    "windows"
+  ],
+  "target-pointer-width": "64",
+  "vendor": "unknown"
+}

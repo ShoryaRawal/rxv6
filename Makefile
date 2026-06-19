@@ -2,9 +2,9 @@ TARGET := riscv64gc-unknown-none-elf
 KERNEL := target/$(TARGET)/release/rxv6
 QEMU   := qemu-system-riscv64
 
-QEMU_FLAGS := -machine virt -nographic -bios none -kernel $(KERNEL)
+QEMU_FLAGS := -machine virt -bios none -kernel $(KERNEL) -device virtio-gpu-device -device virtio-keyboard-device -vga none -serial stdio
 
-.PHONY: build run debug clean
+.PHONY: build run debug clean image
 
 build:
 	cargo build --release
